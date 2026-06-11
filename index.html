@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Space Invaders: Galaxy Defender</title>
+    <title>Neon Strike: Invasion</title>
     <style>
         * {
             box-sizing: border-box;
@@ -16,8 +16,8 @@
             width: 100%;
             height: 100%;
             overflow: hidden;
-            background-color: #000;
-            font-family: 'Courier New', Courier, monospace;
+            background-color: #050508;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
         }
         #game-container {
             position: relative;
@@ -26,16 +26,14 @@
             display: flex;
             justify-content: center;
             align-items: center;
-            background: radial-gradient(circle, #111 0%, #000 100%);
         }
         canvas {
             display: block;
             max-width: 100%;
             max-height: 100%;
-            box-shadow: 0 0 20px rgba(0, 255, 0, 0.15);
-            background: #050505;
+            background: #020205;
         }
-        /* UI Overlays */
+        /* Glassmorphic Modern UI Overlays */
         .overlay {
             position: absolute;
             top: 0;
@@ -46,57 +44,70 @@
             flex-direction: column;
             justify-content: center;
             align-items: center;
-            background: rgba(0, 0, 0, 0.85);
+            background: rgba(5, 5, 10, 0.65);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
             color: #fff;
             z-index: 10;
-            transition: opacity 0.3s ease;
+            transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
         }
         .hidden {
             display: none !important;
             opacity: 0;
+            pointer-events: none;
         }
         h1 {
-            font-size: 2.5rem;
-            color: #0f0;
-            margin-bottom: 20px;
-            text-shadow: 0 0 10px rgba(0, 255, 0, 0.5);
+            font-size: 3rem;
+            font-weight: 800;
+            letter-spacing: 4px;
+            background: linear-gradient(135deg, #00f3ff 0%, #ff007f 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 10px;
             text-align: center;
         }
         p {
-            font-size: 1.1rem;
-            margin-bottom: 30px;
-            color: #aaa;
+            font-size: 1rem;
+            margin-bottom: 35px;
+            color: #8f92a3;
             text-align: center;
             max-width: 80%;
+            line-height: 1.5;
+            letter-spacing: 0.5px;
         }
         button {
-            padding: 15px 40px;
-            font-size: 1.3rem;
-            background: transparent;
-            color: #0f0;
-            border: 2px solid #0f0;
+            padding: 16px 45px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            background: rgba(255, 255, 255, 0.03);
+            color: #00f3ff;
+            border: 1px solid rgba(0, 243, 255, 0.3);
             cursor: pointer;
-            font-family: inherit;
-            font-weight: bold;
+            letter-spacing: 2px;
             text-transform: uppercase;
-            box-shadow: 0 0 10px rgba(0, 255, 0, 0.2);
-            border-radius: 5px;
-            transition: all 0.2s ease;
+            border-radius: 50px;
+            transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+            box-shadow: 0 4px 30px rgba(0, 243, 255, 0.05);
         }
-        button:active, button:hover {
-            background: #0f0;
-            color: #000;
-            box-shadow: 0 0 20px #0f0;
+        button:hover, button:active {
+            background: #00f3ff;
+            color: #020205;
+            border-color: #00f3ff;
+            box-shadow: 0 0 30px rgba(0, 243, 255, 0.4);
+            transform: scale(1.03);
         }
-        /* Mobile Control Hint */
+        /* Sleek Modern Input Labels */
         #mobile-hint {
             position: absolute;
-            bottom: 20px;
-            color: rgba(255, 255, 255, 0.3);
-            font-size: 0.9rem;
+            bottom: 30px;
+            color: rgba(255, 255, 255, 0.25);
+            font-size: 0.85rem;
+            font-weight: 500;
+            letter-spacing: 1.5px;
             pointer-events: none;
             text-align: center;
             width: 100%;
+            text-transform: uppercase;
         }
     </style>
 </head>
@@ -104,23 +115,23 @@
 
     <div id="game-container">
         <canvas id="gameCanvas"></canvas>
-        <div id="mobile-hint">Drag anywhere to move • Tap with second finger to shoot</div>
+        <div id="mobile-hint">Left Screen: Drag to Move • Right Screen: Hold to Fire</div>
 
         <div id="menu-overlay" class="overlay">
-            <h1>SPACE INVADERS</h1>
-            <p>Defend the galaxy. Slide to move, tap to fire.</p>
-            <button id="start-btn">Play Game</button>
+            <h1>NEON STRIKE</h1>
+            <p>A modernized approach to tactical space defense.</p>
+            <button id="start-btn">Launch Operation</button>
         </div>
 
         <div id="gameover-overlay" class="overlay hidden">
-            <h1 id="gameover-title">GAME OVER</h1>
+            <h1 id="gameover-title">SYSTEM FAILURE</h1>
             <p id="final-score">Score: 0</p>
-            <button id="restart-btn">Try Again</button>
+            <button id="restart-btn">Reboot Session</button>
         </div>
     </div>
 
     <script>
-        // --- AUDIO ENGINE (Web Audio API - No external assets required) ---
+        // --- SYNTH AUDIO FX ENGINE ---
         const AudioFX = {
             ctx: null,
             init() {
@@ -134,44 +145,41 @@
                 const gain = this.ctx.createGain();
                 osc.connect(gain);
                 gain.connect(this.ctx.destination);
-
                 const now = this.ctx.currentTime;
 
                 if (type === 'laser') {
-                    osc.type = 'sawtooth';
-                    osc.frequency.setValueAtTime(400, now);
-                    osc.frequency.exponentialRampToValueAtTime(40, now + 0.15);
-                    gain.gain.setValueAtTime(0.3, now);
-                    gain.gain.linearRampToValueAtTime(0.01, now + 0.15);
-                    osc.start(now);
-                    osc.stop(now + 0.15);
-                } else if (type === 'explosion') {
                     osc.type = 'triangle';
-                    osc.frequency.setValueAtTime(150, now);
-                    osc.frequency.linearRampToValueAtTime(10, now + 0.3);
-                    gain.gain.setValueAtTime(0.5, now);
-                    gain.gain.linearRampToValueAtTime(0.01, now + 0.3);
+                    osc.frequency.setValueAtTime(520, now);
+                    osc.frequency.exponentialRampToValueAtTime(120, now + 0.12);
+                    gain.gain.setValueAtTime(0.2, now);
+                    gain.gain.linearRampToValueAtTime(0.001, now + 0.12);
                     osc.start(now);
-                    osc.stop(now + 0.3);
+                    osc.stop(now + 0.12);
+                } else if (type === 'explosion') {
+                    osc.type = 'sawtooth';
+                    osc.frequency.setValueAtTime(110, now);
+                    osc.frequency.linearRampToValueAtTime(20, now + 0.35);
+                    gain.gain.setValueAtTime(0.35, now);
+                    gain.gain.linearRampToValueAtTime(0.001, now + 0.35);
+                    osc.start(now);
+                    osc.stop(now + 0.35);
                 } else if (type === 'alien_laser') {
-                    osc.type = 'square';
-                    osc.frequency.setValueAtTime(200, now);
-                    osc.frequency.linearRampToValueAtTime(600, now + 0.2);
-                    gain.gain.setValueAtTime(0.15, now);
-                    gain.gain.linearRampToValueAtTime(0.01, now + 0.2);
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(180, now);
+                    osc.frequency.linearRampToValueAtTime(450, now + 0.22);
+                    gain.gain.setValueAtTime(0.08, now);
+                    gain.gain.linearRampToValueAtTime(0.001, now + 0.22);
                     osc.start(now);
-                    osc.stop(now + 0.2);
+                    osc.stop(now + 0.22);
                 }
             }
         };
 
-        // --- GAME SETTINGS & SETUP ---
+        // --- GLOBAL SETUP CONFIG ---
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
-
-        // Virtual internal coordinate system (Always 4:3 sharp retro scale)
-        const V_WIDTH = 800;
-        const V_HEIGHT = 600;
+        const V_WIDTH = 900;
+        const V_HEIGHT = 650;
 
         let state = {
             running: false,
@@ -184,97 +192,64 @@
             aliens: [],
             particles: [],
             bunkers: [],
+            stars: [],
             alienDirection: 1,
             alienSpeedModifier: 1,
-            lastTime: 0
+            lastTime: 0,
+            // Multi-touch tracking states
+            moveTouchId: null,
+            moveTouchX: null,
+            shootTouchId: null,
+            isShootingMobile: false
         };
 
-        // Input Trackers
         const keys = {};
-        let touchStartX = null;
-        let isTouching = false;
 
-        // --- PROCEDURAL SPRITES ---
-        // Binary matrices for perfect pixel art rendering
-        const Sprites = {
-            player: [
-                [0,0,0,0,1,1,0,0,0,0],
-                [0,0,0,1,1,1,1,0,0,0],
-                [0,0,1,1,1,1,1,1,0,0],
-                [1,1,1,1,1,1,1,1,1,1],
-                [1,1,1,1,1,1,1,1,1,1],
-                [1,1,0,1,1,1,1,0,1,1]
-            ],
-            alienA: [
-                [0,0,1,0,0,0,0,1,0,0],
-                [0,0,0,1,0,0,1,0,0,0],
-                [0,0,1,1,1,1,1,1,0,0],
-                [0,1,1,0,1,1,0,1,1,0],
-                [1,1,1,1,1,1,1,1,1,1],
-                [1,0,1,1,1,1,1,1,0,1],
-                [1,0,1,0,0,0,0,1,0,1],
-                [0,0,0,1,1,1,1,0,0,0]
-            ],
-            alienB: [
-                [0,0,0,1,1,1,1,0,0,0],
-                [0,1,1,1,1,1,1,1,1,0],
-                [1,1,1,1,1,1,1,1,1,1],
-                [1,1,1,0,0,0,0,1,1,1],
-                [1,1,1,1,1,1,1,1,1,1],
-                [0,0,1,1,1,1,1,1,0,0],
-                [0,1,1,0,0,0,0,1,1,0],
-                [1,1,0,0,0,0,0,0,1,1]
-            ]
-        };
-
-        function drawMatrixSprite(matrix, x, y, width, height, color) {
-            const rows = matrix.length;
-            const cols = matrix[0].length;
-            const pWidth = width / cols;
-            const pHeight = height / rows;
-
-            ctx.fillStyle = color;
-            for (let r = 0; r < rows; r++) {
-                for (let c = 0; c < cols; c++) {
-                    if (matrix[r][c] === 1) {
-                        ctx.fillRect(Math.floor(x + c * pWidth), Math.floor(y + r * pHeight), Math.ceil(pWidth), Math.ceil(pHeight));
-                    }
-                }
+        // Generate dynamic cosmic starfield
+        function generateStarfield() {
+            state.stars = [];
+            for(let i = 0; i < 45; i++) {
+                state.stars.push({
+                    x: Math.random() * V_WIDTH,
+                    y: Math.random() * V_HEIGHT,
+                    size: Math.random() * 1.5 + 0.5,
+                    speed: Math.random() * 15 + 5
+                });
             }
         }
 
-        // --- ENTITY CLASSES ---
+        // --- ENTITY CONFIGURATIONS ---
         class Player {
             constructor() {
-                this.width = 50;
-                this.height = 30;
+                this.width = 46;
+                this.height = 32;
                 this.x = V_WIDTH / 2 - this.width / 2;
-                this.y = V_HEIGHT - 70;
-                this.speed = 400; // pixels per second
+                this.y = V_HEIGHT - 80;
+                this.speed = 480; 
                 this.lastShot = 0;
-                this.shootCooldown = 350; // ms
+                this.shootCooldown = 240; // Sleek, hyper-responsive firing cadence
             }
 
             update(dt) {
-                if (keys['ArrowLeft'] || keys['a']) this.x -= this.speed * dt;
-                if (keys['ArrowRight'] || keys['d']) this.x += this.speed * dt;
+                if (keys['Left']) this.x -= this.speed * dt;
+                if (keys['Right']) this.x += this.speed * dt;
 
-                // Clamp to screen boundaries
-                if (this.x < 10) this.x = 10;
-                if (this.x > V_WIDTH - this.width - 10) this.x = V_WIDTH - this.width - 10;
+                if (this.x < 20) this.x = 20;
+                if (this.x > V_WIDTH - this.width - 20) this.x = V_WIDTH - this.width - 20;
 
-                if (keys[' '] || keys['ArrowUp']) this.shoot();
+                if (keys['Space'] || state.isShootingMobile) {
+                    this.shoot();
+                }
             }
 
             shoot() {
                 const now = Date.now();
                 if (now - this.lastShot > this.shootCooldown) {
                     state.bullets.push({
-                        x: this.x + this.width / 2 - 2,
-                        y: this.y,
-                        width: 4,
-                        height: 15,
-                        speed: 550
+                        x: this.x + this.width / 2,
+                        y: this.y - 4,
+                        length: 16,
+                        speed: 700
                     });
                     AudioFX.play('laser');
                     this.lastShot = now;
@@ -282,7 +257,23 @@
             }
 
             draw() {
-                drawMatrixSprite(Sprites.player, this.x, this.y, this.width, this.height, '#00ff00');
+                ctx.save();
+                ctx.shadowBlur = 15;
+                ctx.shadowColor = '#00f3ff';
+                ctx.strokeStyle = '#00f3ff';
+                ctx.fillStyle = 'rgba(0, 243, 255, 0.12)';
+                ctx.lineWidth = 2.5;
+
+                ctx.beginPath();
+                ctx.moveTo(this.x + this.width / 2, this.y);
+                ctx.lineTo(this.x + this.width, this.y + this.height);
+                ctx.lineTo(this.x + this.width * 0.75, this.y + this.height * 0.75);
+                ctx.lineTo(this.x + this.width * 0.25, this.y + this.height * 0.75);
+                ctx.lineTo(this.x, this.y + this.height);
+                ctx.closePath();
+                ctx.fill();
+                ctx.stroke();
+                ctx.restore();
             }
         }
 
@@ -290,131 +281,128 @@
             constructor(x, y) {
                 this.x = x;
                 this.y = y;
-                this.width = 60;
-                this.height = 40;
-                this.resolution = 4; // size of damageable pixels
+                this.width = 70;
+                this.height = 35;
+                this.resolution = 5;
                 this.grid = [];
                 
-                // Initialize health block grid
-                for (let row = 0; row < this.height; row += this.resolution) {
-                    let r = [];
-                    for (let col = 0; col < this.width; col += this.resolution) {
-                        // Create standard arch-shaped bunker
-                        if (row > this.height * 0.6 && col > this.width * 0.25 && col < this.width * 0.75) {
-                            r.push(0); // empty archway
+                for (let r = 0; r < this.height; r += this.resolution) {
+                    let rowArr = [];
+                    for (let c = 0; c < this.width; c += this.resolution) {
+                        // Curved interior cutout architecture
+                        if (r > this.height * 0.5 && c > this.width * 0.25 && c < this.width * 0.75) {
+                            rowArr.push(0);
                         } else {
-                            r.push(4); // 4 HP per piece
+                            rowArr.push(3); // 3 hits structural integrity
                         }
                     }
-                    this.grid.push(r);
+                    this.grid.push(rowArr);
                 }
             }
 
-            checkCollision(bullet, isAlien) {
-                if (bullet.x + bullet.width < this.x || bullet.x > this.x + this.width ||
-                    bullet.y + bullet.height < this.y || bullet.y > this.y + this.height) {
+            checkCollision(bx, by, isAlien) {
+                if (bx < this.x || bx > this.x + this.width || by < this.y || by > this.y + this.height) {
                     return false;
                 }
+                const gC = Math.floor((bx - this.x) / this.resolution);
+                const gR = Math.floor((by - this.y) / this.resolution);
 
-                // Check local grid coordinate
-                const localX = bullet.x - this.x;
-                const localY = (isAlien ? bullet.y + bullet.height : bullet.y) - this.y;
-
-                const gridC = Math.floor(localX / this.resolution);
-                const gridR = Math.floor(localY / this.resolution);
-
-                if (this.grid[gridR] && this.grid[gridR][gridC] > 0) {
-                    this.grid[gridR][gridC]--; // Destroy or damage piece
+                if (this.grid[gR] && this.grid[gR][gC] > 0) {
+                    this.grid[gR][gC]--; 
                     return true;
                 }
                 return false;
             }
 
             draw() {
+                ctx.save();
                 for (let r = 0; r < this.grid.length; r++) {
                     for (let c = 0; c < this.grid[r].length; c++) {
                         const hp = this.grid[r][c];
                         if (hp > 0) {
-                            ctx.fillStyle = `rgba(0, 220, 0, ${hp / 4})`;
-                            ctx.fillRect(
-                                this.x + c * this.resolution, 
-                                this.y + r * this.resolution, 
-                                this.resolution, 
-                                this.resolution
-                            );
+                            ctx.fillStyle = hp === 3 ? 'rgba(0, 243, 255, 0.75)' : hp === 2 ? 'rgba(0, 180, 255, 0.45)' : 'rgba(0, 100, 255, 0.2)';
+                            ctx.fillRect(this.x + c * this.resolution, this.y + r * this.resolution, this.resolution - 0.5, this.resolution - 0.5);
                         }
                     }
                 }
+                ctx.restore();
             }
         }
 
-        // --- GAME LOGIC ENGINE ---
+        // --- CORE ENGINE PIPELINES ---
 
         function resizeCanvas() {
             const container = document.getElementById('game-container');
-            const windowWidth = container.clientWidth;
-            const windowHeight = container.clientHeight;
+            let w = container.clientWidth;
+            let h = container.clientWidth * (V_HEIGHT / V_WIDTH);
 
-            // Enforce sharp 4:3 retro layout scaling
-            let w = windowWidth;
-            let h = windowWidth * (V_HEIGHT / V_WIDTH);
-
-            if (h > windowHeight) {
-                h = windowHeight;
-                w = windowHeight * (V_WIDTH / V_HEIGHT);
+            if (h > container.clientHeight) {
+                h = container.clientHeight;
+                w = container.clientHeight * (V_WIDTH / V_HEIGHT);
             }
 
             canvas.style.width = `${w}px`;
             canvas.style.height = `${h}px`;
-            
-            // Set internal drawing pixel density safely
             canvas.width = V_WIDTH;
             canvas.height = V_HEIGHT;
         }
 
         function spawnAliens() {
             state.aliens = [];
-            const rows = 5;
-            const cols = 8;
-            const xSpacing = 65;
-            const ySpacing = 45;
-            const xOffset = 80;
-            const yOffset = 80;
-
+            const rows = 4;
+            const cols = 9;
             for (let r = 0; r < rows; r++) {
                 for (let c = 0; c < cols; c++) {
                     state.aliens.push({
-                        x: xOffset + c * xSpacing,
-                        y: yOffset + r * ySpacing,
-                        width: 40,
-                        height: 30,
-                        sprite: (r % 2 === 0) ? Sprites.alienA : Sprites.alienB,
-                        points: (5 - r) * 10
+                        x: 100 + c * 75,
+                        y: 90 + r * 50,
+                        width: 36,
+                        height: 26,
+                        type: r % 2 === 0 ? 'diamond' : 'hex',
+                        points: (4 - r) * 15
                     });
                 }
             }
             state.alienDirection = 1;
-            // Scale dynamically across endless updates
-            state.alienSpeedModifier = 30 + (state.wave * 12); 
+            state.alienSpeedModifier = 35 + (state.wave * 15);
         }
 
-        function spawnBunkers() {
-            state.bunkers = [];
-            const totalBunkers = 4;
-            const spacing = V_WIDTH / (totalBunkers + 1);
-            for (let i = 0; i < totalBunkers; i++) {
-                state.bunkers.push(new Bunker((spacing * (i + 1)) - 30, V_HEIGHT - 140));
+        function drawAlien(a) {
+            ctx.save();
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = '#ff007f';
+            ctx.strokeStyle = '#ff007f';
+            ctx.fillStyle = 'rgba(255, 0, 127, 0.1)';
+            ctx.lineWidth = 2;
+
+            ctx.beginPath();
+            if (a.type === 'diamond') {
+                ctx.moveTo(a.x + a.width / 2, a.y);
+                ctx.lineTo(a.x + a.width, a.y + a.height / 2);
+                ctx.lineTo(a.x + a.width / 2, a.y + a.height);
+                ctx.lineTo(a.x, a.y + a.height / 2);
+            } else {
+                ctx.moveTo(a.x + a.width * 0.25, a.y);
+                ctx.lineTo(a.x + a.width * 0.75, a.y);
+                ctx.lineTo(a.x + a.width, a.y + a.height / 2);
+                ctx.lineTo(a.x + a.width * 0.75, a.y + a.height);
+                ctx.lineTo(a.x + a.width * 0.25, a.y + a.height);
+                ctx.lineTo(a.x, a.y + a.height / 2);
             }
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+            ctx.restore();
         }
 
         function spawnExplosion(x, y, color) {
-            for (let i = 0; i < 12; i++) {
+            for (let i = 0; i < 16; i++) {
                 state.particles.push({
                     x: x,
                     y: y,
-                    vx: (Math.random() - 0.5) * 200,
-                    vy: (Math.random() - 0.5) * 200,
-                    radius: Math.random() * 3 + 1,
+                    vx: (Math.random() - 0.5) * 250,
+                    vy: (Math.random() - 0.5) * 250,
+                    radius: Math.random() * 2 + 1,
                     alpha: 1,
                     color: color
                 });
@@ -429,99 +417,109 @@
             state.alienBullets = [];
             state.particles = [];
             state.player = new Player();
+            generateStarfield();
             spawnAliens();
-            spawnBunkers();
+            
+            // Build modern minimal defense installations
+            state.bunkers = [];
+            const spacing = V_WIDTH / 4;
+            for (let i = 0; i < 3; i++) {
+                state.bunkers.push(new Bunker((spacing * (i + 1)) - 35, V_HEIGHT - 155));
+            }
         }
 
         function update(time) {
             if (!state.running) return;
 
-            // Frame rate independent delta calculation
-            const dt = Math.min((time - state.lastTime) / 1000, 0.1); 
+            const dt = Math.min((time - state.lastTime) / 1000, 0.1);
             state.lastTime = time;
+
+            // Background Starfield Shift
+            for(let star of state.stars) {
+                star.y += star.speed * dt;
+                if(star.y > V_HEIGHT) {
+                    star.y = 0;
+                    star.x = Math.random() * V_WIDTH;
+                }
+            }
 
             state.player.update(dt);
 
-            // 1. Process player firing mechanics
+            // 1. Player Weapon Updates
             for (let i = state.bullets.length - 1; i >= 0; i--) {
                 let b = state.bullets[i];
                 b.y -= b.speed * dt;
+
                 if (b.y < 0) {
                     state.bullets.splice(i, 1);
                     continue;
                 }
 
-                // Bunker Collisions (Player shots)
-                let hitBunker = false;
+                let bulletRemoved = false;
                 for (let bunker of state.bunkers) {
-                    if (bunker.checkCollision(b, false)) {
+                    if (bunker.checkCollision(b.x, b.y, false)) {
                         state.bullets.splice(i, 1);
-                        hitBunker = true;
+                        bulletRemoved = true;
                         break;
                     }
                 }
-                if (hitBunker) continue;
+                if (bulletRemoved) continue;
 
-                // Alien Collisions
                 for (let j = state.aliens.length - 1; j >= 0; j--) {
                     let a = state.aliens[j];
                     if (b.x > a.x && b.x < a.x + a.width && b.y > a.y && b.y < a.y + a.height) {
-                        spawnExplosion(a.x + a.width/2, a.y + a.height/2, '#ff00ff');
+                        spawnExplosion(a.x + a.width / 2, a.y + a.height / 2, '#ff007f');
                         AudioFX.play('explosion');
                         state.score += a.points;
                         state.aliens.splice(j, 1);
                         state.bullets.splice(i, 1);
-                        
-                        // Scale remaining speed
-                        state.alienSpeedModifier += 3;
+                        state.alienSpeedModifier += 4; 
+                        bulletRemoved = true;
                         break;
                     }
                 }
             }
 
-            // 2. Process Alien Grid Systems & Boundaries
-            let shiftDown = false;
-            const currentSpeed = state.alienSpeedModifier * state.alienDirection * dt;
-
+            // 2. Alien Swarm Navigation Engine
+            let switchBound = false;
+            const swarmStep = state.alienSpeedModifier * state.alienDirection * dt;
+            
             for (let a of state.aliens) {
-                a.x += currentSpeed;
-                if (a.x <= 15 || a.x + a.width >= V_WIDTH - 15) {
-                    shiftDown = true;
+                a.x += swarmStep;
+                if (a.x <= 25 || a.x + a.width >= V_WIDTH - 25) {
+                    switchBound = true;
                 }
             }
 
-            if (shiftDown) {
+            if (switchBound) {
                 state.alienDirection *= -1;
                 for (let a of state.aliens) {
-                    a.y += 25;
-                    // Game over condition via complete territory breach
+                    a.y += 24;
                     if (a.y + a.height >= state.player.y) {
                         gameOver();
                     }
                 }
             }
 
-            // Next Wave Trigger
             if (state.aliens.length === 0) {
                 state.wave++;
                 spawnAliens();
             }
 
-            // 3. Alien Automated Firing Systems
-            const baseFireChance = 0.005 + (state.wave * 0.002);
-            if (state.aliens.length > 0 && Math.random() < baseFireChance * (60 * dt)) {
-                const randomAlien = state.aliens[Math.floor(Math.random() * state.aliens.length)];
+            // 3. Automated Alien Counter-Measures
+            const firingFormula = 0.007 + (state.wave * 0.003);
+            if (state.aliens.length > 0 && Math.random() < firingFormula * (60 * dt)) {
+                const shooter = state.aliens[Math.floor(Math.random() * state.aliens.length)];
                 state.alienBullets.push({
-                    x: randomAlien.x + randomAlien.width / 2 - 2,
-                    y: randomAlien.y + randomAlien.height,
-                    width: 4,
-                    height: 12,
-                    speed: 250 + (state.wave * 15)
+                    x: shooter.x + shooter.width / 2,
+                    y: shooter.y + shooter.height,
+                    length: 12,
+                    speed: 280 + (state.wave * 20)
                 });
                 AudioFX.play('alien_laser');
             }
 
-            // 4. Update Enemy Projectiles
+            // 4. Enemy Weapon Matrix Processing
             for (let i = state.alienBullets.length - 1; i >= 0; i--) {
                 let ab = state.alienBullets[i];
                 ab.y += ab.speed * dt;
@@ -531,21 +529,19 @@
                     continue;
                 }
 
-                // Bunker collisions (Alien context)
-                let hitBunker = false;
+                let abRemoved = false;
                 for (let bunker of state.bunkers) {
-                    if (bunker.checkCollision(ab, true)) {
+                    if (bunker.checkCollision(ab.x, ab.y, true)) {
                         state.alienBullets.splice(i, 1);
-                        hitBunker = true;
+                        abRemoved = true;
                         break;
                     }
                 }
-                if (hitBunker) continue;
+                if (abRemoved) continue;
 
-                // Player Collision
                 let p = state.player;
                 if (ab.x > p.x && ab.x < p.x + p.width && ab.y > p.y && ab.y < p.y + p.height) {
-                    spawnExplosion(p.x + p.width/2, p.y + p.height/2, '#00ff00');
+                    spawnExplosion(p.x + p.width / 2, p.y + p.height / 2, '#00f3ff');
                     AudioFX.play('explosion');
                     state.alienBullets.splice(i, 1);
                     state.lives--;
@@ -557,12 +553,12 @@
                 }
             }
 
-            // 5. Update Particle FX
+            // 5. Kinetic Particle Fluid Updates
             for (let i = state.particles.length - 1; i >= 0; i--) {
                 let p = state.particles[i];
                 p.x += p.vx * dt;
                 p.y += p.vy * dt;
-                p.alpha -= dt * 2.5;
+                p.alpha -= dt * 2.2;
                 if (p.alpha <= 0) {
                     state.particles.splice(i, 1);
                 }
@@ -572,22 +568,47 @@
             requestAnimationFrame(update);
         }
 
-        // --- RENDER FUNCTIONS ---
+        // --- RENDER MATRIX PIPELINE ---
         function render() {
             ctx.clearRect(0, 0, V_WIDTH, V_HEIGHT);
 
-            // Draw Entities
+            // Ambient background stars
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.35)';
+            for(let star of state.stars) {
+                ctx.fillRect(star.x, star.y, star.size, star.size);
+            }
+
+            // Draw Structures
             for (let bunker of state.bunkers) bunker.draw();
-            for (let a of state.aliens) drawMatrixSprite(a.sprite, a.x, a.y, a.width, a.height, '#ff00ff');
+            for (let a of state.aliens) drawAlien(a);
             if (state.lives > 0) state.player.draw();
 
-            // Projectiles
-            ctx.fillStyle = '#ffff00';
-            for (let b of state.bullets) ctx.fillRect(b.x, b.y, b.width, b.height);
-            ctx.fillStyle = '#ff0000';
-            for (let ab of state.alienBullets) ctx.fillRect(ab.x, ab.y, ab.width, ab.height);
+            // Neon Player Weapon Lines
+            ctx.save();
+            ctx.lineWidth = 3;
+            ctx.strokeStyle = '#00f3ff';
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = '#00f3ff';
+            ctx.beginPath();
+            for (let b of state.bullets) {
+                ctx.moveTo(b.x, b.y);
+                ctx.lineTo(b.x, b.y + b.length);
+            }
+            ctx.stroke();
 
-            // VFX
+            // Neon Alien Weapon Lines
+            ctx.strokeStyle = '#ff0055';
+            ctx.shadowColor = '#ff0055';
+            ctx.beginPath();
+            for (let ab of state.alienBullets) {
+                ctx.moveTo(ab.x, ab.y);
+                ctx.lineTo(ab.x, ab.y - ab.length);
+            }
+            ctx.stroke();
+            ctx.restore();
+
+            // Kinetic Particle Emitters
+            ctx.save();
             for (let p of state.particles) {
                 ctx.fillStyle = p.color;
                 ctx.globalAlpha = p.alpha;
@@ -595,77 +616,121 @@
                 ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
                 ctx.fill();
             }
-            ctx.globalAlpha = 1.0; // Reset alpha mix bounds safely
+            ctx.restore();
 
-            // Screen Top HUD Rendering UI
-            ctx.fillStyle = '#fff';
-            ctx.font = '20px "Courier New", Courier, monospace';
+            // Sleek Modern HUD Text Layouts
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+            ctx.font = '600 15px -apple-system, system-ui, sans-serif';
+            ctx.letterSpacing = "1px";
+            
             ctx.textAlign = 'left';
-            ctx.fillText(`SCORE: ${state.score}`, 20, 35);
-            ctx.fillText(`WAVE: ${state.wave}`, V_WIDTH / 2 - 40, 35);
+            ctx.fillText(`SCORE • ${state.score}`, 30, 40);
+            
+            ctx.textAlign = 'center';
+            ctx.fillText(`WAVE 0${state.wave}`, V_WIDTH / 2, 40);
+            
             ctx.textAlign = 'right';
-            ctx.fillText(`LIVES: ${'♥'.repeat(Math.max(0, state.lives))}`, V_WIDTH - 20, 35);
+            ctx.fillStyle = '#00f3ff';
+            ctx.fillText(`SYSTEM STABILITY • ${'▲'.repeat(Math.max(0, state.lives))}`, V_WIDTH - 30, 40);
         }
 
         function gameOver() {
             state.running = false;
-            document.getElementById('final-score').innerText = `Score: ${state.score} • Wave: ${state.wave}`;
+            state.isShootingMobile = false;
+            state.moveTouchId = null;
+            state.shootTouchId = null;
+            document.getElementById('final-score').innerText = `Vectors Terminated: ${state.score} • Waves Survived: ${state.wave}`;
             document.getElementById('gameover-overlay').classList.remove('hidden');
         }
 
-        // --- INPUT & EVENT ARCHITECTURES ---
-
-        // Universal Event Handlers
-        window.addEventListener('keydown', e => { 
-            keys[e.key] = true; 
-            // Avoid window scrolling via standard keyboard layouts
-            if(["Space", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.code)) {
+        // --- STABLE CONTROL ARCHITECTURES (KEYBOARD) ---
+        window.addEventListener('keydown', e => {
+            if (e.code === 'Space') keys['Space'] = true;
+            if (e.code === 'ArrowLeft' || e.code === 'KeyA') keys['Left'] = true;
+            if (e.code === 'ArrowRight' || e.code === 'KeyD') keys['Right'] = true;
+            
+            if (["Space", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.code)) {
                 e.preventDefault();
             }
         });
-        window.addEventListener('keyup', e => { keys[e.key] = false; });
+        window.addEventListener('keyup', e => {
+            if (e.code === 'Space') keys['Space'] = false;
+            if (e.code === 'ArrowLeft' || e.code === 'KeyA') keys['Left'] = false;
+            if (e.code === 'ArrowRight' || e.code === 'KeyD') keys['Right'] = false;
+        });
 
-        // High Fidelity Fluid Touch Inputs for Mobile Browsing context
+        // --- RIGOROUS SPLIT-SCREEN MOBILE TOUCH ENGINE ---
         window.addEventListener('touchstart', e => {
             if (!state.running) return;
-            const touch = e.touches[0];
-            touchStartX = touch.clientX;
-            isTouching = true;
-
-            // Secondary tap triggers shooting mechanisms fluidly
-            if (e.touches.length > 1) {
-                state.player.shoot();
+            
+            for (let i = 0; i < e.changedTouches.length; i++) {
+                const touch = e.changedTouches[i];
+                
+                // RIGHT SIDE OF SCREEN = FIRING ENGINE TRIGGER
+                if (touch.clientX > window.innerWidth / 2) {
+                    if (state.shootTouchId === null) {
+                        state.shootTouchId = touch.identifier;
+                        state.isShootingMobile = true;
+                        state.player.shoot(); // Fast immediate initial pulse execution
+                    }
+                } else {
+                    // LEFT SIDE OF SCREEN = SLIDING MOVEMENT CAPTURE
+                    if (state.moveTouchId === null) {
+                        state.moveTouchId = touch.identifier;
+                        state.moveTouchX = touch.clientX;
+                    }
+                }
             }
         }, { passive: false });
 
         window.addEventListener('touchmove', e => {
-            if (!state.running || !touchStartX) return;
-            e.preventDefault(); // Lock browser scrolling patterns outright
+            if (!state.running) return;
+            e.preventDefault(); // Defeat web view scroll actions completely
 
-            const touch = e.touches[0];
-            const diffX = touch.clientX - touchStartX;
-            touchStartX = touch.clientX;
-
-            // Apply relative positional mapping delta shift to player container
-            const scaleFactor = V_WIDTH / canvas.clientWidth;
-            state.player.x += diffX * scaleFactor * 1.3; 
+            for (let i = 0; i < e.changedTouches.length; i++) {
+                const touch = e.changedTouches[i];
+                
+                if (touch.identifier === state.moveTouchId) {
+                    const deltaX = touch.clientX - state.moveTouchX;
+                    state.moveTouchX = touch.clientX;
+                    
+                    const renderingScale = V_WIDTH / canvas.clientWidth;
+                    state.player.x += deltaX * renderingScale * 1.35;
+                }
+            }
         }, { passive: false });
 
         window.addEventListener('touchend', e => {
-            if (e.touches.length === 0) {
-                isTouching = false;
-                touchStartX = null;
+            for (let i = 0; i < e.changedTouches.length; i++) {
+                const touch = e.changedTouches[i];
+                
+                if (touch.identifier === state.moveTouchId) {
+                    state.moveTouchId = null;
+                }
+                if (touch.identifier === state.shootTouchId) {
+                    state.shootTouchId = null;
+                    state.isShootingMobile = false;
+                }
             }
         });
 
-        // Single fallback tap implementation to ensure intuitive shooting
-        window.addEventListener('click', () => {
-            if (state.running && !keys[' ']) {
-                state.player.shoot();
-            }
+        window.addEventListener('touchcancel', e => {
+            state.moveTouchId = null;
+            state.shootTouchId = null;
+            state.isShootingMobile = false;
         });
 
-        // Overlay Interactive hooks
+        // Desktop mouse fallback firing convenience 
+        window.addEventListener('mousedown', (e) => {
+            if (state.running && e.button === 0) {
+                keys['Space'] = true;
+            }
+        });
+        window.addEventListener('mouseup', () => {
+            keys['Space'] = false;
+        });
+
+        // Interface UI Event Mapping hooks
         document.getElementById('start-btn').addEventListener('click', () => {
             AudioFX.init();
             document.getElementById('menu-overlay').classList.add('hidden');
@@ -683,11 +748,9 @@
             requestAnimationFrame(update);
         });
 
-        // Structural scaling initialization rules
         window.addEventListener('resize', resizeCanvas);
-        window.addEventListener('orientationchange', () => setTimeout(resizeCanvas, 200));
+        window.addEventListener('orientationchange', () => setTimeout(resizeCanvas, 250));
         
-        // Initial execution run setup
         resizeCanvas();
     </script>
 </body>
