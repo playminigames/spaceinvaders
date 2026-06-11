@@ -1,0 +1,694 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Space Invaders: Galaxy Defender</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-user-select: none;
+            margin: 0;
+            padding: 0;
+        }
+        body, html {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #000;
+            font-family: 'Courier New', Courier, monospace;
+        }
+        #game-container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: radial-gradient(circle, #111 0%, #000 100%);
+        }
+        canvas {
+            display: block;
+            max-width: 100%;
+            max-height: 100%;
+            box-shadow: 0 0 20px rgba(0, 255, 0, 0.15);
+            background: #050505;
+        }
+        /* UI Overlays */
+        .overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background: rgba(0, 0, 0, 0.85);
+            color: #fff;
+            z-index: 10;
+            transition: opacity 0.3s ease;
+        }
+        .hidden {
+            display: none !important;
+            opacity: 0;
+        }
+        h1 {
+            font-size: 2.5rem;
+            color: #0f0;
+            margin-bottom: 20px;
+            text-shadow: 0 0 10px rgba(0, 255, 0, 0.5);
+            text-align: center;
+        }
+        p {
+            font-size: 1.1rem;
+            margin-bottom: 30px;
+            color: #aaa;
+            text-align: center;
+            max-width: 80%;
+        }
+        button {
+            padding: 15px 40px;
+            font-size: 1.3rem;
+            background: transparent;
+            color: #0f0;
+            border: 2px solid #0f0;
+            cursor: pointer;
+            font-family: inherit;
+            font-weight: bold;
+            text-transform: uppercase;
+            box-shadow: 0 0 10px rgba(0, 255, 0, 0.2);
+            border-radius: 5px;
+            transition: all 0.2s ease;
+        }
+        button:active, button:hover {
+            background: #0f0;
+            color: #000;
+            box-shadow: 0 0 20px #0f0;
+        }
+        /* Mobile Control Hint */
+        #mobile-hint {
+            position: absolute;
+            bottom: 20px;
+            color: rgba(255, 255, 255, 0.3);
+            font-size: 0.9rem;
+            pointer-events: none;
+            text-align: center;
+            width: 100%;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="game-container">
+        <canvas id="gameCanvas"></canvas>
+        <div id="mobile-hint">Drag anywhere to move • Tap with second finger to shoot</div>
+
+        <div id="menu-overlay" class="overlay">
+            <h1>SPACE INVADERS</h1>
+            <p>Defend the galaxy. Slide to move, tap to fire.</p>
+            <button id="start-btn">Play Game</button>
+        </div>
+
+        <div id="gameover-overlay" class="overlay hidden">
+            <h1 id="gameover-title">GAME OVER</h1>
+            <p id="final-score">Score: 0</p>
+            <button id="restart-btn">Try Again</button>
+        </div>
+    </div>
+
+    <script>
+        // --- AUDIO ENGINE (Web Audio API - No external assets required) ---
+        const AudioFX = {
+            ctx: null,
+            init() {
+                this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+            },
+            play(type) {
+                if (!this.ctx) return;
+                if (this.ctx.state === 'suspended') this.ctx.resume();
+                
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+
+                const now = this.ctx.currentTime;
+
+                if (type === 'laser') {
+                    osc.type = 'sawtooth';
+                    osc.frequency.setValueAtTime(400, now);
+                    osc.frequency.exponentialRampToValueAtTime(40, now + 0.15);
+                    gain.gain.setValueAtTime(0.3, now);
+                    gain.gain.linearRampToValueAtTime(0.01, now + 0.15);
+                    osc.start(now);
+                    osc.stop(now + 0.15);
+                } else if (type === 'explosion') {
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(150, now);
+                    osc.frequency.linearRampToValueAtTime(10, now + 0.3);
+                    gain.gain.setValueAtTime(0.5, now);
+                    gain.gain.linearRampToValueAtTime(0.01, now + 0.3);
+                    osc.start(now);
+                    osc.stop(now + 0.3);
+                } else if (type === 'alien_laser') {
+                    osc.type = 'square';
+                    osc.frequency.setValueAtTime(200, now);
+                    osc.frequency.linearRampToValueAtTime(600, now + 0.2);
+                    gain.gain.setValueAtTime(0.15, now);
+                    gain.gain.linearRampToValueAtTime(0.01, now + 0.2);
+                    osc.start(now);
+                    osc.stop(now + 0.2);
+                }
+            }
+        };
+
+        // --- GAME SETTINGS & SETUP ---
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // Virtual internal coordinate system (Always 4:3 sharp retro scale)
+        const V_WIDTH = 800;
+        const V_HEIGHT = 600;
+
+        let state = {
+            running: false,
+            score: 0,
+            lives: 3,
+            wave: 1,
+            player: null,
+            bullets: [],
+            alienBullets: [],
+            aliens: [],
+            particles: [],
+            bunkers: [],
+            alienDirection: 1,
+            alienSpeedModifier: 1,
+            lastTime: 0
+        };
+
+        // Input Trackers
+        const keys = {};
+        let touchStartX = null;
+        let isTouching = false;
+
+        // --- PROCEDURAL SPRITES ---
+        // Binary matrices for perfect pixel art rendering
+        const Sprites = {
+            player: [
+                [0,0,0,0,1,1,0,0,0,0],
+                [0,0,0,1,1,1,1,0,0,0],
+                [0,0,1,1,1,1,1,1,0,0],
+                [1,1,1,1,1,1,1,1,1,1],
+                [1,1,1,1,1,1,1,1,1,1],
+                [1,1,0,1,1,1,1,0,1,1]
+            ],
+            alienA: [
+                [0,0,1,0,0,0,0,1,0,0],
+                [0,0,0,1,0,0,1,0,0,0],
+                [0,0,1,1,1,1,1,1,0,0],
+                [0,1,1,0,1,1,0,1,1,0],
+                [1,1,1,1,1,1,1,1,1,1],
+                [1,0,1,1,1,1,1,1,0,1],
+                [1,0,1,0,0,0,0,1,0,1],
+                [0,0,0,1,1,1,1,0,0,0]
+            ],
+            alienB: [
+                [0,0,0,1,1,1,1,0,0,0],
+                [0,1,1,1,1,1,1,1,1,0],
+                [1,1,1,1,1,1,1,1,1,1],
+                [1,1,1,0,0,0,0,1,1,1],
+                [1,1,1,1,1,1,1,1,1,1],
+                [0,0,1,1,1,1,1,1,0,0],
+                [0,1,1,0,0,0,0,1,1,0],
+                [1,1,0,0,0,0,0,0,1,1]
+            ]
+        };
+
+        function drawMatrixSprite(matrix, x, y, width, height, color) {
+            const rows = matrix.length;
+            const cols = matrix[0].length;
+            const pWidth = width / cols;
+            const pHeight = height / rows;
+
+            ctx.fillStyle = color;
+            for (let r = 0; r < rows; r++) {
+                for (let c = 0; c < cols; c++) {
+                    if (matrix[r][c] === 1) {
+                        ctx.fillRect(Math.floor(x + c * pWidth), Math.floor(y + r * pHeight), Math.ceil(pWidth), Math.ceil(pHeight));
+                    }
+                }
+            }
+        }
+
+        // --- ENTITY CLASSES ---
+        class Player {
+            constructor() {
+                this.width = 50;
+                this.height = 30;
+                this.x = V_WIDTH / 2 - this.width / 2;
+                this.y = V_HEIGHT - 70;
+                this.speed = 400; // pixels per second
+                this.lastShot = 0;
+                this.shootCooldown = 350; // ms
+            }
+
+            update(dt) {
+                if (keys['ArrowLeft'] || keys['a']) this.x -= this.speed * dt;
+                if (keys['ArrowRight'] || keys['d']) this.x += this.speed * dt;
+
+                // Clamp to screen boundaries
+                if (this.x < 10) this.x = 10;
+                if (this.x > V_WIDTH - this.width - 10) this.x = V_WIDTH - this.width - 10;
+
+                if (keys[' '] || keys['ArrowUp']) this.shoot();
+            }
+
+            shoot() {
+                const now = Date.now();
+                if (now - this.lastShot > this.shootCooldown) {
+                    state.bullets.push({
+                        x: this.x + this.width / 2 - 2,
+                        y: this.y,
+                        width: 4,
+                        height: 15,
+                        speed: 550
+                    });
+                    AudioFX.play('laser');
+                    this.lastShot = now;
+                }
+            }
+
+            draw() {
+                drawMatrixSprite(Sprites.player, this.x, this.y, this.width, this.height, '#00ff00');
+            }
+        }
+
+        class Bunker {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.width = 60;
+                this.height = 40;
+                this.resolution = 4; // size of damageable pixels
+                this.grid = [];
+                
+                // Initialize health block grid
+                for (let row = 0; row < this.height; row += this.resolution) {
+                    let r = [];
+                    for (let col = 0; col < this.width; col += this.resolution) {
+                        // Create standard arch-shaped bunker
+                        if (row > this.height * 0.6 && col > this.width * 0.25 && col < this.width * 0.75) {
+                            r.push(0); // empty archway
+                        } else {
+                            r.push(4); // 4 HP per piece
+                        }
+                    }
+                    this.grid.push(r);
+                }
+            }
+
+            checkCollision(bullet, isAlien) {
+                if (bullet.x + bullet.width < this.x || bullet.x > this.x + this.width ||
+                    bullet.y + bullet.height < this.y || bullet.y > this.y + this.height) {
+                    return false;
+                }
+
+                // Check local grid coordinate
+                const localX = bullet.x - this.x;
+                const localY = (isAlien ? bullet.y + bullet.height : bullet.y) - this.y;
+
+                const gridC = Math.floor(localX / this.resolution);
+                const gridR = Math.floor(localY / this.resolution);
+
+                if (this.grid[gridR] && this.grid[gridR][gridC] > 0) {
+                    this.grid[gridR][gridC]--; // Destroy or damage piece
+                    return true;
+                }
+                return false;
+            }
+
+            draw() {
+                for (let r = 0; r < this.grid.length; r++) {
+                    for (let c = 0; c < this.grid[r].length; c++) {
+                        const hp = this.grid[r][c];
+                        if (hp > 0) {
+                            ctx.fillStyle = `rgba(0, 220, 0, ${hp / 4})`;
+                            ctx.fillRect(
+                                this.x + c * this.resolution, 
+                                this.y + r * this.resolution, 
+                                this.resolution, 
+                                this.resolution
+                            );
+                        }
+                    }
+                }
+            }
+        }
+
+        // --- GAME LOGIC ENGINE ---
+
+        function resizeCanvas() {
+            const container = document.getElementById('game-container');
+            const windowWidth = container.clientWidth;
+            const windowHeight = container.clientHeight;
+
+            // Enforce sharp 4:3 retro layout scaling
+            let w = windowWidth;
+            let h = windowWidth * (V_HEIGHT / V_WIDTH);
+
+            if (h > windowHeight) {
+                h = windowHeight;
+                w = windowHeight * (V_WIDTH / V_HEIGHT);
+            }
+
+            canvas.style.width = `${w}px`;
+            canvas.style.height = `${h}px`;
+            
+            // Set internal drawing pixel density safely
+            canvas.width = V_WIDTH;
+            canvas.height = V_HEIGHT;
+        }
+
+        function spawnAliens() {
+            state.aliens = [];
+            const rows = 5;
+            const cols = 8;
+            const xSpacing = 65;
+            const ySpacing = 45;
+            const xOffset = 80;
+            const yOffset = 80;
+
+            for (let r = 0; r < rows; r++) {
+                for (let c = 0; c < cols; c++) {
+                    state.aliens.push({
+                        x: xOffset + c * xSpacing,
+                        y: yOffset + r * ySpacing,
+                        width: 40,
+                        height: 30,
+                        sprite: (r % 2 === 0) ? Sprites.alienA : Sprites.alienB,
+                        points: (5 - r) * 10
+                    });
+                }
+            }
+            state.alienDirection = 1;
+            // Scale dynamically across endless updates
+            state.alienSpeedModifier = 30 + (state.wave * 12); 
+        }
+
+        function spawnBunkers() {
+            state.bunkers = [];
+            const totalBunkers = 4;
+            const spacing = V_WIDTH / (totalBunkers + 1);
+            for (let i = 0; i < totalBunkers; i++) {
+                state.bunkers.push(new Bunker((spacing * (i + 1)) - 30, V_HEIGHT - 140));
+            }
+        }
+
+        function spawnExplosion(x, y, color) {
+            for (let i = 0; i < 12; i++) {
+                state.particles.push({
+                    x: x,
+                    y: y,
+                    vx: (Math.random() - 0.5) * 200,
+                    vy: (Math.random() - 0.5) * 200,
+                    radius: Math.random() * 3 + 1,
+                    alpha: 1,
+                    color: color
+                });
+            }
+        }
+
+        function initGame() {
+            state.score = 0;
+            state.lives = 3;
+            state.wave = 1;
+            state.bullets = [];
+            state.alienBullets = [];
+            state.particles = [];
+            state.player = new Player();
+            spawnAliens();
+            spawnBunkers();
+        }
+
+        function update(time) {
+            if (!state.running) return;
+
+            // Frame rate independent delta calculation
+            const dt = Math.min((time - state.lastTime) / 1000, 0.1); 
+            state.lastTime = time;
+
+            state.player.update(dt);
+
+            // 1. Process player firing mechanics
+            for (let i = state.bullets.length - 1; i >= 0; i--) {
+                let b = state.bullets[i];
+                b.y -= b.speed * dt;
+                if (b.y < 0) {
+                    state.bullets.splice(i, 1);
+                    continue;
+                }
+
+                // Bunker Collisions (Player shots)
+                let hitBunker = false;
+                for (let bunker of state.bunkers) {
+                    if (bunker.checkCollision(b, false)) {
+                        state.bullets.splice(i, 1);
+                        hitBunker = true;
+                        break;
+                    }
+                }
+                if (hitBunker) continue;
+
+                // Alien Collisions
+                for (let j = state.aliens.length - 1; j >= 0; j--) {
+                    let a = state.aliens[j];
+                    if (b.x > a.x && b.x < a.x + a.width && b.y > a.y && b.y < a.y + a.height) {
+                        spawnExplosion(a.x + a.width/2, a.y + a.height/2, '#ff00ff');
+                        AudioFX.play('explosion');
+                        state.score += a.points;
+                        state.aliens.splice(j, 1);
+                        state.bullets.splice(i, 1);
+                        
+                        // Scale remaining speed
+                        state.alienSpeedModifier += 3;
+                        break;
+                    }
+                }
+            }
+
+            // 2. Process Alien Grid Systems & Boundaries
+            let shiftDown = false;
+            const currentSpeed = state.alienSpeedModifier * state.alienDirection * dt;
+
+            for (let a of state.aliens) {
+                a.x += currentSpeed;
+                if (a.x <= 15 || a.x + a.width >= V_WIDTH - 15) {
+                    shiftDown = true;
+                }
+            }
+
+            if (shiftDown) {
+                state.alienDirection *= -1;
+                for (let a of state.aliens) {
+                    a.y += 25;
+                    // Game over condition via complete territory breach
+                    if (a.y + a.height >= state.player.y) {
+                        gameOver();
+                    }
+                }
+            }
+
+            // Next Wave Trigger
+            if (state.aliens.length === 0) {
+                state.wave++;
+                spawnAliens();
+            }
+
+            // 3. Alien Automated Firing Systems
+            const baseFireChance = 0.005 + (state.wave * 0.002);
+            if (state.aliens.length > 0 && Math.random() < baseFireChance * (60 * dt)) {
+                const randomAlien = state.aliens[Math.floor(Math.random() * state.aliens.length)];
+                state.alienBullets.push({
+                    x: randomAlien.x + randomAlien.width / 2 - 2,
+                    y: randomAlien.y + randomAlien.height,
+                    width: 4,
+                    height: 12,
+                    speed: 250 + (state.wave * 15)
+                });
+                AudioFX.play('alien_laser');
+            }
+
+            // 4. Update Enemy Projectiles
+            for (let i = state.alienBullets.length - 1; i >= 0; i--) {
+                let ab = state.alienBullets[i];
+                ab.y += ab.speed * dt;
+
+                if (ab.y > V_HEIGHT) {
+                    state.alienBullets.splice(i, 1);
+                    continue;
+                }
+
+                // Bunker collisions (Alien context)
+                let hitBunker = false;
+                for (let bunker of state.bunkers) {
+                    if (bunker.checkCollision(ab, true)) {
+                        state.alienBullets.splice(i, 1);
+                        hitBunker = true;
+                        break;
+                    }
+                }
+                if (hitBunker) continue;
+
+                // Player Collision
+                let p = state.player;
+                if (ab.x > p.x && ab.x < p.x + p.width && ab.y > p.y && ab.y < p.y + p.height) {
+                    spawnExplosion(p.x + p.width/2, p.y + p.height/2, '#00ff00');
+                    AudioFX.play('explosion');
+                    state.alienBullets.splice(i, 1);
+                    state.lives--;
+
+                    if (state.lives <= 0) {
+                        gameOver();
+                    }
+                    break;
+                }
+            }
+
+            // 5. Update Particle FX
+            for (let i = state.particles.length - 1; i >= 0; i--) {
+                let p = state.particles[i];
+                p.x += p.vx * dt;
+                p.y += p.vy * dt;
+                p.alpha -= dt * 2.5;
+                if (p.alpha <= 0) {
+                    state.particles.splice(i, 1);
+                }
+            }
+
+            render();
+            requestAnimationFrame(update);
+        }
+
+        // --- RENDER FUNCTIONS ---
+        function render() {
+            ctx.clearRect(0, 0, V_WIDTH, V_HEIGHT);
+
+            // Draw Entities
+            for (let bunker of state.bunkers) bunker.draw();
+            for (let a of state.aliens) drawMatrixSprite(a.sprite, a.x, a.y, a.width, a.height, '#ff00ff');
+            if (state.lives > 0) state.player.draw();
+
+            // Projectiles
+            ctx.fillStyle = '#ffff00';
+            for (let b of state.bullets) ctx.fillRect(b.x, b.y, b.width, b.height);
+            ctx.fillStyle = '#ff0000';
+            for (let ab of state.alienBullets) ctx.fillRect(ab.x, ab.y, ab.width, ab.height);
+
+            // VFX
+            for (let p of state.particles) {
+                ctx.fillStyle = p.color;
+                ctx.globalAlpha = p.alpha;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            ctx.globalAlpha = 1.0; // Reset alpha mix bounds safely
+
+            // Screen Top HUD Rendering UI
+            ctx.fillStyle = '#fff';
+            ctx.font = '20px "Courier New", Courier, monospace';
+            ctx.textAlign = 'left';
+            ctx.fillText(`SCORE: ${state.score}`, 20, 35);
+            ctx.fillText(`WAVE: ${state.wave}`, V_WIDTH / 2 - 40, 35);
+            ctx.textAlign = 'right';
+            ctx.fillText(`LIVES: ${'♥'.repeat(Math.max(0, state.lives))}`, V_WIDTH - 20, 35);
+        }
+
+        function gameOver() {
+            state.running = false;
+            document.getElementById('final-score').innerText = `Score: ${state.score} • Wave: ${state.wave}`;
+            document.getElementById('gameover-overlay').classList.remove('hidden');
+        }
+
+        // --- INPUT & EVENT ARCHITECTURES ---
+
+        // Universal Event Handlers
+        window.addEventListener('keydown', e => { 
+            keys[e.key] = true; 
+            // Avoid window scrolling via standard keyboard layouts
+            if(["Space", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.code)) {
+                e.preventDefault();
+            }
+        });
+        window.addEventListener('keyup', e => { keys[e.key] = false; });
+
+        // High Fidelity Fluid Touch Inputs for Mobile Browsing context
+        window.addEventListener('touchstart', e => {
+            if (!state.running) return;
+            const touch = e.touches[0];
+            touchStartX = touch.clientX;
+            isTouching = true;
+
+            // Secondary tap triggers shooting mechanisms fluidly
+            if (e.touches.length > 1) {
+                state.player.shoot();
+            }
+        }, { passive: false });
+
+        window.addEventListener('touchmove', e => {
+            if (!state.running || !touchStartX) return;
+            e.preventDefault(); // Lock browser scrolling patterns outright
+
+            const touch = e.touches[0];
+            const diffX = touch.clientX - touchStartX;
+            touchStartX = touch.clientX;
+
+            // Apply relative positional mapping delta shift to player container
+            const scaleFactor = V_WIDTH / canvas.clientWidth;
+            state.player.x += diffX * scaleFactor * 1.3; 
+        }, { passive: false });
+
+        window.addEventListener('touchend', e => {
+            if (e.touches.length === 0) {
+                isTouching = false;
+                touchStartX = null;
+            }
+        });
+
+        // Single fallback tap implementation to ensure intuitive shooting
+        window.addEventListener('click', () => {
+            if (state.running && !keys[' ']) {
+                state.player.shoot();
+            }
+        });
+
+        // Overlay Interactive hooks
+        document.getElementById('start-btn').addEventListener('click', () => {
+            AudioFX.init();
+            document.getElementById('menu-overlay').classList.add('hidden');
+            initGame();
+            state.running = true;
+            state.lastTime = performance.now();
+            requestAnimationFrame(update);
+        });
+
+        document.getElementById('restart-btn').addEventListener('click', () => {
+            document.getElementById('gameover-overlay').classList.add('hidden');
+            initGame();
+            state.running = true;
+            state.lastTime = performance.now();
+            requestAnimationFrame(update);
+        });
+
+        // Structural scaling initialization rules
+        window.addEventListener('resize', resizeCanvas);
+        window.addEventListener('orientationchange', () => setTimeout(resizeCanvas, 200));
+        
+        // Initial execution run setup
+        resizeCanvas();
+    </script>
+</body>
+</html>
