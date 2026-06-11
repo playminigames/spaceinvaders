@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Neon Strike: Invasion</title>
+    <title>Space Invaders</title>
     <style>
         * {
             box-sizing: border-box;
@@ -96,7 +96,6 @@
             box-shadow: 0 0 30px rgba(0, 243, 255, 0.4);
             transform: scale(1.03);
         }
-        /* Sleek Modern Input Labels */
         #mobile-hint {
             position: absolute;
             bottom: 30px;
@@ -115,16 +114,16 @@
 
     <div id="game-container">
         <canvas id="gameCanvas"></canvas>
-        <div id="mobile-hint">Left Screen: Drag to Move • Right Screen: Hold to Fire</div>
+        <div id="mobile-hint">Drag anywhere to move • Continuous Auto-Fire Active</div>
 
         <div id="menu-overlay" class="overlay">
             <h1>NEON STRIKE</h1>
-            <p>A modernized approach to tactical space defense.</p>
+            <p>Automatic combat systems online. Drag anywhere to guide the ship.</p>
             <button id="start-btn">Launch Operation</button>
         </div>
 
         <div id="gameover-overlay" class="overlay hidden">
-            <h1 id="gameover-title">SYSTEM FAILURE</h1>
+            <h1>SYSTEM FAILURE</h1>
             <p id="final-score">Score: 0</p>
             <button id="restart-btn">Reboot Session</button>
         </div>
@@ -151,7 +150,7 @@
                     osc.type = 'triangle';
                     osc.frequency.setValueAtTime(520, now);
                     osc.frequency.exponentialRampToValueAtTime(120, now + 0.12);
-                    gain.gain.setValueAtTime(0.2, now);
+                    gain.gain.setValueAtTime(0.15, now);
                     gain.gain.linearRampToValueAtTime(0.001, now + 0.12);
                     osc.start(now);
                     osc.stop(now + 0.12);
@@ -167,7 +166,7 @@
                     osc.type = 'sine';
                     osc.frequency.setValueAtTime(180, now);
                     osc.frequency.linearRampToValueAtTime(450, now + 0.22);
-                    gain.gain.setValueAtTime(0.08, now);
+                    gain.gain.setValueAtTime(0.06, now);
                     gain.gain.linearRampToValueAtTime(0.001, now + 0.22);
                     osc.start(now);
                     osc.stop(now + 0.22);
@@ -196,16 +195,13 @@
             alienDirection: 1,
             alienSpeedModifier: 1,
             lastTime: 0,
-            // Multi-touch tracking states
-            moveTouchId: null,
-            moveTouchX: null,
-            shootTouchId: null,
-            isShootingMobile: false
+            // Fluid touch states
+            touchId: null,
+            touchX: null
         };
 
         const keys = {};
 
-        // Generate dynamic cosmic starfield
         function generateStarfield() {
             state.stars = [];
             for(let i = 0; i < 45; i++) {
@@ -227,7 +223,7 @@
                 this.y = V_HEIGHT - 80;
                 this.speed = 480; 
                 this.lastShot = 0;
-                this.shootCooldown = 240; // Sleek, hyper-responsive firing cadence
+                this.shootCooldown = 220; // Sleek automatic fire rate
             }
 
             update(dt) {
@@ -236,10 +232,6 @@
 
                 if (this.x < 20) this.x = 20;
                 if (this.x > V_WIDTH - this.width - 20) this.x = V_WIDTH - this.width - 20;
-
-                if (keys['Space'] || state.isShootingMobile) {
-                    this.shoot();
-                }
             }
 
             shoot() {
@@ -249,7 +241,7 @@
                         x: this.x + this.width / 2,
                         y: this.y - 4,
                         length: 16,
-                        speed: 700
+                        speed: 750
                     });
                     AudioFX.play('laser');
                     this.lastShot = now;
@@ -289,18 +281,17 @@
                 for (let r = 0; r < this.height; r += this.resolution) {
                     let rowArr = [];
                     for (let c = 0; c < this.width; c += this.resolution) {
-                        // Curved interior cutout architecture
                         if (r > this.height * 0.5 && c > this.width * 0.25 && c < this.width * 0.75) {
                             rowArr.push(0);
                         } else {
-                            rowArr.push(3); // 3 hits structural integrity
+                            rowArr.push(3);
                         }
                     }
                     this.grid.push(rowArr);
                 }
             }
 
-            checkCollision(bx, by, isAlien) {
+            checkCollision(bx, by) {
                 if (bx < this.x || bx > this.x + this.width || by < this.y || by > this.y + this.height) {
                     return false;
                 }
@@ -420,7 +411,6 @@
             generateStarfield();
             spawnAliens();
             
-            // Build modern minimal defense installations
             state.bunkers = [];
             const spacing = V_WIDTH / 4;
             for (let i = 0; i < 3; i++) {
@@ -434,7 +424,6 @@
             const dt = Math.min((time - state.lastTime) / 1000, 0.1);
             state.lastTime = time;
 
-            // Background Starfield Shift
             for(let star of state.stars) {
                 star.y += star.speed * dt;
                 if(star.y > V_HEIGHT) {
@@ -444,8 +433,9 @@
             }
 
             state.player.update(dt);
+            state.player.shoot(); // Run weapon systems automatically
 
-            // 1. Player Weapon Updates
+            // 1. Weapon Updates
             for (let i = state.bullets.length - 1; i >= 0; i--) {
                 let b = state.bullets[i];
                 b.y -= b.speed * dt;
@@ -457,7 +447,7 @@
 
                 let bulletRemoved = false;
                 for (let bunker of state.bunkers) {
-                    if (bunker.checkCollision(b.x, b.y, false)) {
+                    if (bunker.checkCollision(b.x, b.y)) {
                         state.bullets.splice(i, 1);
                         bulletRemoved = true;
                         break;
@@ -480,7 +470,7 @@
                 }
             }
 
-            // 2. Alien Swarm Navigation Engine
+            // 2. Alien Swarm Logic
             let switchBound = false;
             const swarmStep = state.alienSpeedModifier * state.alienDirection * dt;
             
@@ -506,7 +496,7 @@
                 spawnAliens();
             }
 
-            // 3. Automated Alien Counter-Measures
+            // 3. Counter-Measures
             const firingFormula = 0.007 + (state.wave * 0.003);
             if (state.aliens.length > 0 && Math.random() < firingFormula * (60 * dt)) {
                 const shooter = state.aliens[Math.floor(Math.random() * state.aliens.length)];
@@ -519,7 +509,7 @@
                 AudioFX.play('alien_laser');
             }
 
-            // 4. Enemy Weapon Matrix Processing
+            // 4. Enemy Weapons Matrix
             for (let i = state.alienBullets.length - 1; i >= 0; i--) {
                 let ab = state.alienBullets[i];
                 ab.y += ab.speed * dt;
@@ -531,7 +521,7 @@
 
                 let abRemoved = false;
                 for (let bunker of state.bunkers) {
-                    if (bunker.checkCollision(ab.x, ab.y, true)) {
+                    if (bunker.checkCollision(ab.x, ab.y)) {
                         state.alienBullets.splice(i, 1);
                         abRemoved = true;
                         break;
@@ -553,7 +543,7 @@
                 }
             }
 
-            // 5. Kinetic Particle Fluid Updates
+            // 5. Particles
             for (let i = state.particles.length - 1; i >= 0; i--) {
                 let p = state.particles[i];
                 p.x += p.vx * dt;
@@ -572,18 +562,16 @@
         function render() {
             ctx.clearRect(0, 0, V_WIDTH, V_HEIGHT);
 
-            // Ambient background stars
             ctx.fillStyle = 'rgba(255, 255, 255, 0.35)';
             for(let star of state.stars) {
                 ctx.fillRect(star.x, star.y, star.size, star.size);
             }
 
-            // Draw Structures
             for (let bunker of state.bunkers) bunker.draw();
             for (let a of state.aliens) drawAlien(a);
             if (state.lives > 0) state.player.draw();
 
-            // Neon Player Weapon Lines
+            // Lasers
             ctx.save();
             ctx.lineWidth = 3;
             ctx.strokeStyle = '#00f3ff';
@@ -596,7 +584,6 @@
             }
             ctx.stroke();
 
-            // Neon Alien Weapon Lines
             ctx.strokeStyle = '#ff0055';
             ctx.shadowColor = '#ff0055';
             ctx.beginPath();
@@ -607,7 +594,6 @@
             ctx.stroke();
             ctx.restore();
 
-            // Kinetic Particle Emitters
             ctx.save();
             for (let p of state.particles) {
                 ctx.fillStyle = p.color;
@@ -618,7 +604,7 @@
             }
             ctx.restore();
 
-            // Sleek Modern HUD Text Layouts
+            // HUD
             ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
             ctx.font = '600 15px -apple-system, system-ui, sans-serif';
             ctx.letterSpacing = "1px";
@@ -631,69 +617,48 @@
             
             ctx.textAlign = 'right';
             ctx.fillStyle = '#00f3ff';
-            ctx.fillText(`SYSTEM STABILITY • ${'▲'.repeat(Math.max(0, state.lives))}`, V_WIDTH - 30, 40);
+            ctx.fillText(`SYSTEM INTEGRITY • ${'▲'.repeat(Math.max(0, state.lives))}`, V_WIDTH - 30, 40);
         }
 
         function gameOver() {
             state.running = false;
-            state.isShootingMobile = false;
-            state.moveTouchId = null;
-            state.shootTouchId = null;
+            state.touchId = null;
             document.getElementById('final-score').innerText = `Vectors Terminated: ${state.score} • Waves Survived: ${state.wave}`;
             document.getElementById('gameover-overlay').classList.remove('hidden');
         }
 
-        // --- STABLE CONTROL ARCHITECTURES (KEYBOARD) ---
+        // --- STABLE DESKTOP CONTROLS ---
         window.addEventListener('keydown', e => {
-            if (e.code === 'Space') keys['Space'] = true;
             if (e.code === 'ArrowLeft' || e.code === 'KeyA') keys['Left'] = true;
             if (e.code === 'ArrowRight' || e.code === 'KeyD') keys['Right'] = true;
-            
             if (["Space", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.code)) {
                 e.preventDefault();
             }
         });
         window.addEventListener('keyup', e => {
-            if (e.code === 'Space') keys['Space'] = false;
             if (e.code === 'ArrowLeft' || e.code === 'KeyA') keys['Left'] = false;
             if (e.code === 'ArrowRight' || e.code === 'KeyD') keys['Right'] = false;
         });
 
-        // --- RIGOROUS SPLIT-SCREEN MOBILE TOUCH ENGINE ---
+        // --- SINGLE FINGER DRAG ENGINE (ANYWHERE ON SCREEN) ---
         window.addEventListener('touchstart', e => {
             if (!state.running) return;
-            
-            for (let i = 0; i < e.changedTouches.length; i++) {
-                const touch = e.changedTouches[i];
-                
-                // RIGHT SIDE OF SCREEN = FIRING ENGINE TRIGGER
-                if (touch.clientX > window.innerWidth / 2) {
-                    if (state.shootTouchId === null) {
-                        state.shootTouchId = touch.identifier;
-                        state.isShootingMobile = true;
-                        state.player.shoot(); // Fast immediate initial pulse execution
-                    }
-                } else {
-                    // LEFT SIDE OF SCREEN = SLIDING MOVEMENT CAPTURE
-                    if (state.moveTouchId === null) {
-                        state.moveTouchId = touch.identifier;
-                        state.moveTouchX = touch.clientX;
-                    }
-                }
-            }
+            const touch = e.touches[0];
+            state.touchId = touch.identifier;
+            state.touchX = touch.clientX;
         }, { passive: false });
 
         window.addEventListener('touchmove', e => {
             if (!state.running) return;
-            e.preventDefault(); // Defeat web view scroll actions completely
+            e.preventDefault(); 
 
             for (let i = 0; i < e.changedTouches.length; i++) {
                 const touch = e.changedTouches[i];
-                
-                if (touch.identifier === state.moveTouchId) {
-                    const deltaX = touch.clientX - state.moveTouchX;
-                    state.moveTouchX = touch.clientX;
+                if (touch.identifier === state.touchId) {
+                    const deltaX = touch.clientX - state.touchX;
+                    state.touchX = touch.clientX;
                     
+                    // Smooth relative calculation
                     const renderingScale = V_WIDTH / canvas.clientWidth;
                     state.player.x += deltaX * renderingScale * 1.35;
                 }
@@ -703,31 +668,14 @@
         window.addEventListener('touchend', e => {
             for (let i = 0; i < e.changedTouches.length; i++) {
                 const touch = e.changedTouches[i];
-                
-                if (touch.identifier === state.moveTouchId) {
-                    state.moveTouchId = null;
-                }
-                if (touch.identifier === state.shootTouchId) {
-                    state.shootTouchId = null;
-                    state.isShootingMobile = false;
+                if (touch.identifier === state.touchId) {
+                    state.touchId = null;
                 }
             }
         });
 
         window.addEventListener('touchcancel', e => {
-            state.moveTouchId = null;
-            state.shootTouchId = null;
-            state.isShootingMobile = false;
-        });
-
-        // Desktop mouse fallback firing convenience 
-        window.addEventListener('mousedown', (e) => {
-            if (state.running && e.button === 0) {
-                keys['Space'] = true;
-            }
-        });
-        window.addEventListener('mouseup', () => {
-            keys['Space'] = false;
+            state.touchId = null;
         });
 
         // Interface UI Event Mapping hooks
